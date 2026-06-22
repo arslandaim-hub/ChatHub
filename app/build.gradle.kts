@@ -9,7 +9,7 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.myapplication"
+        applicationId = "com.arslandaim.chathub"
         minSdk = 24
         targetSdk = 37
         versionCode = 2
