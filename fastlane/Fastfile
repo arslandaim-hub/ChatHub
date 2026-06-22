@@ -1,0 +1,44 @@
+# Fastfile for ChatHub
+default_platform(:android)
+
+platform :android do
+  desc "Build and verify the app"
+  lane :build do
+    gradle(task: "assembleDebug")
+  end
+
+  desc "Submit metadata to F-Droid (Standard structure)"
+  lane :metadata do
+    # This lane is primarily for local organization.
+    # F-Droid reads the metadata/ folder automatically.
+    puts "Metadata is ready in fastlane/metadata/android"
+  end
+
+  desc "Capture screenshots"
+  lane :screenshots do
+    screengrab
+  end
+
+  desc "Promote metadata and screenshots to Play Store"
+  lane :promote_metadata do
+    supply(
+      track: 'internal',
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      metadata_path: './fastlane/metadata/android'
+    )
+  end
+
+  desc "Check current metadata status"
+  lane :check_metadata do
+    puts "--- Screenshots ---"
+    sh "ls fastlane/metadata/android/en-US/images/phoneScreenshots/"
+    puts "--- Metadata Text ---"
+    sh "ls fastlane/metadata/android/en-US/*.txt"
+  end
+
+  desc "Clean screenshots"
+  lane :clean_screenshots do
+    sh "rm -rf fastlane/metadata/android/en-US/images/phoneScreenshots/*"
+  end
+end

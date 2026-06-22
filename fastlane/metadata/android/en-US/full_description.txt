@@ -1,0 +1,15 @@
+ChatHub is a robust, privacy-first utility designed to give you complete control over your WhatsApp notification history. By securely capturing and storing messages locally on your device, ChatHub ensures that you always have access to your important conversations—even if the original messages are deleted.
+
+Key Features:
+- Unified Conversation View: Seamlessly browse through individual chats and group messages in one consolidated, searchable list.
+- Precision Search: Find exactly what you're looking for with our advanced search engine. Filter by keyword, specific dates, or even exact timestamps.
+- Regional Date Support: Fully customizable date formatting. Choose between UK (DD/MM/YYYY) or US (MM/DD/YYYY) styles to match your preference.
+- Smart Auto-Formatting: Effortlessly enter search dates with our intelligent input field that automatically formats your typing in real-time.
+- Uncompromising Privacy: Your messages are protected by industry-standard security. Enable a 4-digit PIN or use Biometric authentication (Fingerprint/Face unlock) to keep your data safe.
+- 100% Local Storage: Your privacy is our priority. All messages are stored in a secure database on your device and never uploaded to any servers.
+- Custom Themes: Personalize your experience with beautiful backgrounds like Stars, Waves, and Aurora, plus multiple message bubble themes.
+
+How it works:
+ChatHub monitors your notifications to detect incoming WhatsApp messages and saves them instantly to your local device. It is a completely offline-capable tool that puts your privacy first.
+
+Note: This app requires Notification Access permission to function. It does not require or use an internet connection to manage your messages.

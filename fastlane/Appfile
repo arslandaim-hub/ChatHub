@@ -1,0 +1,4 @@
+# Appfile for Fastlane
+# Replace with your actual package name and path to json key if using Google Play features
+# json_key_file("")
+package_name("com.example.myapplication")

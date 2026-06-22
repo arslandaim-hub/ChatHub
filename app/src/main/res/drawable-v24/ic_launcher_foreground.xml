@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Glow -->
+    <path
+        android:fillColor="#33FFFFFF"
+        android:pathData="M54,24C36.3,24 22,38.3 22,56C22,63.1 24.3,69.7 28.2,75L22,86L34.5,83.5C39.8,86.3 46.7,88 54,88C71.7,88 86,73.7 86,56C86,38.3 71.7,24 54,24Z" />
+    <!-- Main Bubble -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28C38.5,28 26,40.5 26,56C26,62.2 28.1,68 31.6,72.6L28,82L39,79.8C43.3,82.4 48.5,84 54,84C69.5,84 82,71.5 82,56C82,40.5 69.5,28 54,28Z" />
+    <!-- Inner Chat Lines -->
+    <path
+        android:fillColor="#303F9F"
+        android:pathData="M42,48h24v4h-24zM42,56h16v4h-16zM42,64h24v4h-24z" />
+</vector>

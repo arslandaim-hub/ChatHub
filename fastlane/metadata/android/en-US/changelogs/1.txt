@@ -1,0 +1,6 @@
+Initial release of ChatHub!
+- Unified message view for personal and group chats.
+- Advanced search by text, date, and time.
+- Chat lock with PIN and Biometric support.
+- Custom app and message themes.
+- Regional date format support (UK/US).
