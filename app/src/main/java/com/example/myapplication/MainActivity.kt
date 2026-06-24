@@ -49,6 +49,7 @@ import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -107,11 +108,13 @@ class MainActivity : FragmentActivity() {
                 
                 var currentScreen by remember { mutableStateOf("Main") }
                 var selectedChat by remember { mutableStateOf<String?>(null) }
+                var searchFilterQuery by remember { mutableStateOf<String?>(null) }
                 var searchFilterDate by remember { mutableStateOf<String?>(null) }
                 var searchFilterTime by remember { mutableStateOf<String?>(null) }
                 var isAuthenticated by remember { 
                     mutableStateOf(!isChatLockEnabled) 
                 }
+                var isServiceEnabled by remember { mutableStateOf(false) }
                 
                 // Ensure authentication state is synced with settings on startup
                 LaunchedEffect(isChatLockEnabled) {
@@ -149,7 +152,7 @@ class MainActivity : FragmentActivity() {
                     biometricPrompt.authenticate(promptInfo)
                 }
 
-                // Reset authentication when app is backgrounded
+                // Reset authentication when app is backgrounded and check for notification access
                 DisposableEffect(isChatLockEnabled, lifecycleOwner) {
                     if (!isChatLockEnabled) {
                         isAuthenticated = true
@@ -158,6 +161,9 @@ class MainActivity : FragmentActivity() {
                     val observer = LifecycleEventObserver { _, event ->
                         if (event == Lifecycle.Event.ON_STOP && isChatLockEnabled) {
                             isAuthenticated = false
+                        }
+                        if (event == Lifecycle.Event.ON_START) {
+                            isServiceEnabled = isNotificationServiceEnabled()
                         }
                     }
                     lifecycleOwner.lifecycle.addObserver(observer)
@@ -192,6 +198,7 @@ class MainActivity : FragmentActivity() {
                         } else if (selectedChat != null) {
                             ChatDetailScreen(
                                 chatName = selectedChat!!,
+                                filterQuery = searchFilterQuery,
                                 filterDate = searchFilterDate,
                                 filterTime = searchFilterTime,
                                 viewModel = viewModel,
@@ -199,23 +206,27 @@ class MainActivity : FragmentActivity() {
                                 selectedAppTheme = selectedAppTheme,
                                 onBack = { 
                                     selectedChat = null
+                                    searchFilterQuery = null
                                     searchFilterDate = null
                                     searchFilterTime = null
                                 }
                             )
                             BackHandler { 
                                 selectedChat = null
+                                searchFilterQuery = null
                                 searchFilterDate = null
                                 searchFilterTime = null
                             }
                         } else {
                             MainContent(
                                 viewModel = viewModel,
+                                isServiceEnabled = isServiceEnabled,
                                 selectedMessageTheme = selectedMessageTheme,
                                 selectedAppTheme = selectedAppTheme,
                                 onOpenSettings = { currentScreen = "Settings" },
-                                onChatSelected = { name, date, time ->
+                                onChatSelected = { name, query, date, time ->
                                     selectedChat = name
+                                    searchFilterQuery = query
                                     searchFilterDate = date
                                     searchFilterTime = time
                                 }
@@ -264,19 +275,18 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun isNotificationServiceEnabled(): Boolean {
-        val cn = ComponentName(this, WhatsappNotificationListenerService::class.java)
-        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        return (flat != null) && flat.contains(cn.flattenToString())
+        return NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainContent(
         viewModel: MainViewModel,
+        isServiceEnabled: Boolean,
         selectedMessageTheme: MessageTheme,
         selectedAppTheme: AppBackgroundTheme,
         onOpenSettings: () -> Unit,
-        onChatSelected: (String, String?, String?) -> Unit
+        onChatSelected: (String, String?, String?, String?) -> Unit
     ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
@@ -328,7 +338,7 @@ class MainActivity : FragmentActivity() {
         ) { innerPadding ->
             MainScreen(
                 modifier = Modifier.padding(innerPadding),
-                isServiceEnabled = isNotificationServiceEnabled(),
+                isServiceEnabled = isServiceEnabled,
                 viewModel = viewModel,
                 selectedMessageTheme = selectedMessageTheme,
                 selectedAppTheme = selectedAppTheme,
@@ -341,6 +351,7 @@ class MainActivity : FragmentActivity() {
     @Composable
     fun ChatDetailScreen(
         chatName: String,
+        filterQuery: String? = null,
         filterDate: String? = null,
         filterTime: String? = null,
         viewModel: MainViewModel,
@@ -351,7 +362,7 @@ class MainActivity : FragmentActivity() {
         val messages by viewModel.allMessagesUnified.collectAsState(initial = emptyList())
         val dateFormat by viewModel.selectedDateFormat.collectAsState()
         
-        val chatMessages = remember(chatName, messages, filterDate, filterTime, dateFormat) {
+        val chatMessages = remember(chatName, messages, filterQuery, filterDate, filterTime, dateFormat) {
             messages.filter { msg ->
                 val matchesChat = if (msg.isGroupMessage) msg.groupName == chatName else msg.senderName == chatName
                 if (!matchesChat) return@filter false
@@ -363,8 +374,9 @@ class MainActivity : FragmentActivity() {
 
                 val matchesDate = filterDate == null || msgDate == filterDate
                 val matchesTime = filterTime == null || msgTime.contains(filterTime, ignoreCase = true)
+                val matchesQuery = filterQuery == null || msg.messageText.contains(filterQuery, ignoreCase = true)
 
-                matchesDate && matchesTime
+                matchesDate && matchesTime && matchesQuery
             }.sortedByDescending { it.timestamp }
         }
 
@@ -453,6 +465,7 @@ class MainActivity : FragmentActivity() {
                         message = message,
                         theme = selectedMessageTheme,
                         dateFormat = dateFormat,
+                        searchQuery = filterQuery ?: "",
                         onClick = { messageToDelete = message }
                     )
                 }
@@ -1041,15 +1054,23 @@ fun MainScreen(
     viewModel: MainViewModel = viewModel(),
     selectedMessageTheme: MessageTheme,
     selectedAppTheme: AppBackgroundTheme,
-    onChatSelected: (String, String?, String?) -> Unit
+    onChatSelected: (String, String?, String?, String?) -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var searchDate by remember { mutableStateOf("") }
     var searchTime by remember { mutableStateOf("") }
+    var filterGroups by remember { mutableStateOf<Boolean?>(null) }
+    var sortByRecent by remember { mutableStateOf(true) }
     var isSearchExpanded by remember { mutableStateOf(false) }
 
     val allMessages by viewModel.allMessagesUnified.collectAsState(initial = emptyList())
-    val filteredMessages by viewModel.searchMessages(searchQuery, searchDate.ifBlank { null }, searchTime.ifBlank { null }).collectAsState(initial = emptyList())
+    val filteredMessages by viewModel.searchMessages(
+        query = searchQuery,
+        date = searchDate.ifBlank { null },
+        time = searchTime.ifBlank { null },
+        filterGroups = filterGroups,
+        sortByRecent = sortByRecent
+    ).collectAsState(initial = emptyList())
     val selectedDateFormat by viewModel.selectedDateFormat.collectAsState()
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -1081,6 +1102,7 @@ fun MainScreen(
                                 searchQuery = ""
                                 searchDate = ""
                                 searchTime = ""
+                                filterGroups = null
                                 isSearchExpanded = false
                             }) { Icon(Icons.Default.Close, null) }
                         }
@@ -1114,8 +1136,43 @@ fun MainScreen(
                             singleLine = true
                         )
                     }
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = filterGroups == true,
+                            onClick = { filterGroups = if (filterGroups == true) null else true },
+                            label = { Text("Groups") },
+                            leadingIcon = if (filterGroups == true) {
+                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                            } else null
+                        )
+                        FilterChip(
+                            selected = filterGroups == false,
+                            onClick = { filterGroups = if (filterGroups == false) null else false },
+                            label = { Text("Private") },
+                            leadingIcon = if (filterGroups == false) {
+                                { Icon(Icons.Default.Check, null, modifier = Modifier.size(18.dp)) }
+                            } else null
+                        )
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        IconButton(onClick = { sortByRecent = !sortByRecent }) {
+                            Icon(
+                                imageVector = if (sortByRecent) Icons.Default.Sort else Icons.Default.Abc,
+                                contentDescription = "Toggle Sort",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
                     Text(
-                        "Tip: Time is optional for better accuracy.",
+                        "Tip: Use query for name/text, or filter by date/time/type.",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(top = 4.dp)
@@ -1137,7 +1194,7 @@ fun MainScreen(
             }
         }
 
-        val messagesToDisplay = if (searchQuery.isNotBlank() || searchDate.isNotBlank() || searchTime.isNotBlank()) {
+        val messagesToDisplay = if (searchQuery.isNotBlank() || searchDate.isNotBlank() || searchTime.isNotBlank() || filterGroups != null) {
             filteredMessages
         } else {
             allMessages
@@ -1149,9 +1206,10 @@ fun MainScreen(
             messageTheme = selectedMessageTheme,
             appTheme = selectedAppTheme,
             dateFormat = selectedDateFormat,
-            isSearching = searchQuery.isNotBlank() || searchDate.isNotBlank() || searchTime.isNotBlank(),
+            searchQuery = searchQuery,
+            isSearching = searchQuery.isNotBlank() || searchDate.isNotBlank() || searchTime.isNotBlank() || filterGroups != null,
             onChatSelected = { name ->
-                onChatSelected(name, searchDate.ifBlank { null }, searchTime.ifBlank { null })
+                onChatSelected(name, searchQuery.ifBlank { null }, searchDate.ifBlank { null }, searchTime.ifBlank { null })
             }
         )
     }
@@ -1164,6 +1222,7 @@ fun MessageList(
     messageTheme: MessageTheme,
     appTheme: AppBackgroundTheme,
     dateFormat: DateFormatPreference,
+    searchQuery: String,
     isSearching: Boolean,
     onChatSelected: (String) -> Unit
 ) {
@@ -1171,7 +1230,7 @@ fun MessageList(
     if (messages.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                "No messages saved yet.",
+                "No messages found.",
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(16.dp),
                 color = if (appTheme.type != AppBackgroundType.NONE) Color.White else Color.Unspecified
@@ -1268,6 +1327,7 @@ fun MessageList(
                         message = message,
                         theme = messageTheme,
                         dateFormat = dateFormat,
+                        searchQuery = searchQuery,
                         onClick = { messageToDelete = message }
                     )
                 }
@@ -1277,6 +1337,7 @@ fun MessageList(
                     item {
                         SenderHeader(
                             senderName = sender,
+                            searchQuery = searchQuery,
                             onToggle = { onChatSelected(sender) },
                             onLongClick = { chatToDelete = sender to isGroup },
                             appTheme = appTheme,
@@ -1296,6 +1357,7 @@ fun MessageList(
 @Composable
 fun SenderHeader(
     senderName: String,
+    searchQuery: String,
     onToggle: () -> Unit,
     onLongClick: () -> Unit,
     appTheme: AppBackgroundTheme,
@@ -1356,7 +1418,11 @@ fun SenderHeader(
             Spacer(modifier = Modifier.width(16.dp))
             
             Text(
-                text = senderName,
+                text = SearchUtils.highlightText(
+                    text = senderName,
+                    query = searchQuery,
+                    highlightColor = Color(0xFFFFEB3B).copy(alpha = 0.5f)
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = if (appTheme.type != AppBackgroundType.NONE) Color.White else MaterialTheme.colorScheme.onSurface,
@@ -1374,7 +1440,13 @@ fun SenderHeader(
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun MessageItem(message: WhatsappMessage, theme: MessageTheme, dateFormat: DateFormatPreference, onClick: () -> Unit) {
+fun MessageItem(
+    message: WhatsappMessage, 
+    theme: MessageTheme, 
+    dateFormat: DateFormatPreference, 
+    searchQuery: String = "",
+    onClick: () -> Unit
+) {
     val sdf = SimpleDateFormat("${dateFormat.pattern}, hh:mm a", Locale.getDefault())
     val dateString = sdf.format(Date(message.timestamp))
     var isExpanded by remember { mutableStateOf(false) }
@@ -1426,11 +1498,15 @@ fun MessageItem(message: WhatsappMessage, theme: MessageTheme, dateFormat: DateF
                     modifier = Modifier.padding(bottom = 6.dp)
                 ) {
                     Text(
-                        text = if (message.isGroupMessage && !message.groupName.isNullOrBlank()) {
-                            "${message.senderName} @ ${message.groupName}"
-                        } else {
-                            message.senderName
-                        },
+                        text = SearchUtils.highlightText(
+                            text = if (message.isGroupMessage && !message.groupName.isNullOrBlank()) {
+                                "${message.senderName} @ ${message.groupName}"
+                            } else {
+                                message.senderName
+                            },
+                            query = searchQuery,
+                            highlightColor = Color(0xFFFFEB3B).copy(alpha = 0.4f)
+                        ),
                         style = MaterialTheme.typography.labelLarge,
                         color = if (theme.contentColor == Color.Unspecified) MaterialTheme.colorScheme.primary else theme.contentColor,
                         fontWeight = FontWeight.ExtraBold,
@@ -1439,7 +1515,11 @@ fun MessageItem(message: WhatsappMessage, theme: MessageTheme, dateFormat: DateF
                 }
 
                 Text(
-                    text = message.messageText,
+                    text = SearchUtils.highlightText(
+                        text = message.messageText,
+                        query = searchQuery,
+                        highlightColor = Color(0xFFFFEB3B).copy(alpha = 0.4f)
+                    ),
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (theme.contentColor == Color.Unspecified) Color.Unspecified else theme.contentColor,
                     maxLines = if (isExpanded) Int.MAX_VALUE else 2,

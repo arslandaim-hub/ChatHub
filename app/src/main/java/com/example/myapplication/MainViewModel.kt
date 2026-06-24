@@ -105,26 +105,56 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun searchMessages(query: String, date: String? = null, time: String? = null): Flow<List<WhatsappMessage>> {
+    /**
+     * Sophisticated search system that filters and sorts messages.
+     */
+    fun searchMessages(
+        query: String,
+        date: String? = null,
+        time: String? = null,
+        filterGroups: Boolean? = null,
+        sortByRecent: Boolean = true
+    ): Flow<List<WhatsappMessage>> {
         return themeManager.selectedDateFormat.flatMapLatest { dateFormat ->
             messageDao.getAllMessagesUnified().map { messages ->
-                messages.filter { msg ->
-                    val matchesQuery = query.isBlank() || 
-                        msg.senderName.contains(query, ignoreCase = true) || 
-                        msg.messageText.contains(query, ignoreCase = true) || 
-                        (msg.groupName?.contains(query, ignoreCase = true) ?: false)
+                val trimmedQuery = query.trim()
+                val trimmedTime = time?.trim()?.lowercase()
+
+                val filtered = messages.filter { msg ->
+                    // 1. Filter by Group/Private if specified
+                    if (filterGroups != null && msg.isGroupMessage != filterGroups) return@filter false
+
+                    // 2. Filter by Search Query (Name or Text)
+                    val matchesQuery = trimmedQuery.isBlank() || 
+                        msg.senderName.contains(trimmedQuery, ignoreCase = true) || 
+                        msg.messageText.contains(trimmedQuery, ignoreCase = true) || 
+                        (msg.groupName?.contains(trimmedQuery, ignoreCase = true) ?: false)
                     
                     if (!matchesQuery) return@filter false
 
-                    val sdfDate = SimpleDateFormat(dateFormat.pattern, Locale.getDefault())
-                    val sdfTime = SimpleDateFormat("hh:mm a", Locale.getDefault())
-                    val msgDate = sdfDate.format(Date(msg.timestamp))
-                    val msgTime = sdfTime.format(Date(msg.timestamp))
+                    // 3. Filter by Date
+                    if (!date.isNullOrBlank()) {
+                        val sdfDate = SimpleDateFormat(dateFormat.pattern, Locale.getDefault())
+                        val msgDate = sdfDate.format(Date(msg.timestamp))
+                        if (msgDate != date) return@filter false
+                    }
 
-                    val matchesDate = date.isNullOrBlank() || msgDate == date
-                    val matchesTime = time.isNullOrBlank() || msgTime.contains(time, ignoreCase = true)
+                    // 4. Filter by Time (HH:MM AM/PM)
+                    if (!trimmedTime.isNullOrBlank()) {
+                        val sdfTime = SimpleDateFormat("hh:mm a", Locale.getDefault())
+                        val msgTime = sdfTime.format(Date(msg.timestamp)).lowercase()
+                        if (!msgTime.contains(trimmedTime)) return@filter false
+                    }
 
-                    matchesDate && matchesTime
+                    true
+                }
+
+                if (sortByRecent) {
+                    filtered.sortedByDescending { it.timestamp }
+                } else {
+                    filtered.sortedBy { msg ->
+                        if (msg.isGroupMessage) (msg.groupName ?: msg.senderName) else msg.senderName
+                    }
                 }
             }
         }

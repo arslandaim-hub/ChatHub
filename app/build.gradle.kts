@@ -5,8 +5,20 @@ plugins {
 }
 
 android {
-    namespace = "com.example.myapplication"
+    // 1. Fixed namespace to prevent AndroidManifest conflicts
+    namespace = "com.arslandaim.chathub"
     compileSdk = 37
+
+    // 2. Added production signing configuration block
+    signingConfigs {
+        create("release") {
+            // Assumes your .jks file is stored in your main project folder
+            storeFile = rootProject.file("MyApplication/chathub-release.jks")
+            storePassword = "chatHub"
+            keyAlias = "key0"
+            keyPassword = "chatHub"
+        }
+    }
 
     defaultConfig {
         applicationId = "com.arslandaim.chathub"
@@ -23,6 +35,8 @@ android {
             optimization {
                 enable = false
             }
+            // 3. Linked your release build type to use the new keystore config
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
