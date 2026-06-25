@@ -13,7 +13,7 @@ android {
     signingConfigs {
         create("release") {
             // Assumes your .jks file is stored in your main project folder
-            storeFile = rootProject.file("MyApplication/chathub-release.jks")
+            storeFile = rootProject.file("MyApplication/chathubKey.jks")
             storePassword = "chatHub"
             keyAlias = "key0"
             keyPassword = "chatHub"
