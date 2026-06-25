@@ -16,7 +16,7 @@ android {
             storeFile = rootProject.file("MyApplication/chathubKey.jks")
             storePassword = "chatHub"
             keyAlias = "key0"
-            keyPassword = "chatHub"
+            keyPassword = "chathub"
         }
     }
 
